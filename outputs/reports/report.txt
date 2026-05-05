@@ -1,0 +1,508 @@
+I reviewed the uploaded notebook contents and prepared the report according to the structure and rules in your prompt. The report below is written in English and can be used as a GitHub project report or adapted into your README. 
+
+# Bitcoin Price Prediction Using Machine Learning
+
+## 1. Executive Summary
+
+This project presents a complete machine learning workflow for short-term Bitcoin price prediction using historical market data. The dataset contains high-frequency Bitcoin market records at 1-minute intervals, including Open, High, Low, Close, Volume, and timestamp information.
+
+The project follows a structured data science pipeline: data loading, initial inspection, exploratory data analysis, data cleaning, feature engineering, model training, model evaluation, and final prediction analysis. Several regression models were trained and compared, including Linear Regression, Ridge Regression, Lasso Regression, and ElasticNet Regression.
+
+The final model was selected based on evaluation metrics such as R² Score, MAE, and RMSE. Linear Regression achieved the best overall performance, with the lowest prediction errors and the highest R² score. However, the results should be interpreted carefully because the model predicts the next 1-minute Bitcoin closing price, not long-term market trends.
+
+Overall, this project demonstrates how historical price data, lag features, moving averages, returns, and volatility indicators can be used to build a short-horizon Bitcoin price prediction model.
+
+---
+
+## 2. Project Objective
+
+The main objective of this project is to predict the next 1-minute Bitcoin closing price using historical market data and machine learning regression models.
+
+The prediction target is:
+
+**Target variable: `Next_Close`**
+
+This means the model uses the current and historical market information to estimate the closing price of the next time interval.
+
+The project aims to:
+
+* Analyze historical Bitcoin market behavior.
+* Explore price trends, volume behavior, volatility, and return patterns.
+* Engineer meaningful features from raw OHLCV data.
+* Train and compare multiple regression models.
+* Evaluate model performance using regression metrics.
+* Interpret prediction errors and model limitations.
+
+This is a short-term forecasting project, not a long-term Bitcoin investment prediction system.
+
+---
+
+## 3. Dataset Description
+
+The dataset used in this project contains historical Bitcoin market data recorded at 1-minute intervals. Each row represents one market interval and includes price and trading activity information.
+
+The original dataset contains:
+
+| Property                   |                                  Value |
+| -------------------------- | -------------------------------------: |
+| Number of rows             |                              7,536,652 |
+| Number of original columns |                                      6 |
+| Frequency                  |                     1-minute intervals |
+| Time range                 | Approximately 2012-01-01 to 2026-05-02 |
+| Data type                  |            Numerical OHLCV market data |
+
+Original columns:
+
+| Column      | Description                                         |
+| ----------- | --------------------------------------------------- |
+| `Timestamp` | Unix timestamp representing the time of each record |
+| `Open`      | Opening Bitcoin price for the interval              |
+| `High`      | Highest Bitcoin price during the interval           |
+| `Low`       | Lowest Bitcoin price during the interval            |
+| `Close`     | Closing Bitcoin price for the interval              |
+| `Volume`    | Amount of Bitcoin traded during the interval        |
+
+The raw timestamp values were converted into a readable `Date` column. The final modeling dataset contains engineered features and the target variable `Next_Close`.
+
+After feature engineering and cleaning, the model-ready dataset contains approximately:
+
+| Property |     Value |
+| -------- | --------: |
+| Rows     | 7,535,196 |
+| Columns  |        22 |
+
+---
+
+## 4. Data Preparation and Cleaning
+
+The data preparation process started with loading the raw CSV file and inspecting its structure. Initial checks showed that all original columns were numerical and stored as `float64`.
+
+The raw dataset did not contain missing values:
+
+| Column Group           | Missing Values |
+| ---------------------- | -------------: |
+| Original OHLCV columns |              0 |
+
+The `Timestamp` column was converted into a human-readable datetime column:
+
+```python
+Date = pd.to_datetime(Timestamp, unit="s")
+```
+
+This conversion was important because it enabled time-based analysis and feature engineering.
+
+Duplicate analysis showed that there were no duplicated timestamps. This means each row represented a unique 1-minute market interval. Some repeated OHLCV combinations were observed, but they were not removed because identical market values can naturally occur in high-frequency financial data, especially during low-volatility periods.
+
+During feature engineering, rolling-based features created missing values at the beginning of the dataset. For example:
+
+* `MA_60` created the first 59 missing values.
+* `MA_240` created the first 239 missing values.
+* `MA_1440` created the first 1439 missing values.
+* `Rolling_Volatility` created missing values due to rolling calculations.
+
+These missing rows were removed because there was not enough historical context to calculate rolling features. Since the dataset contains over 7.5 million rows, removing these initial rows did not cause meaningful information loss.
+
+Several columns were removed from the final model-ready dataset because they were either redundant or not directly usable by the model:
+
+| Removed Column      | Reason                                                      |
+| ------------------- | ----------------------------------------------------------- |
+| `Timestamp`         | Replaced by extracted time-based features                   |
+| `Date`              | Raw datetime is not directly suitable for regression models |
+| `Range`             | Duplicated the same information as `Volatility`             |
+| `Cumulative_Return` | Useful for EDA but not selected as a model feature          |
+
+---
+
+## 5. Exploratory Data Analysis
+
+The EDA stage focused on understanding Bitcoin’s market behavior through price trends, volume patterns, volatility, returns, and feature relationships.
+
+### Bitcoin Price Trend
+
+The Bitcoin closing price showed a strong long-term upward trend, especially in later years. Early values were very low compared to recent price levels. This confirms that Bitcoin has experienced major long-term growth, but not in a smooth or linear way.
+
+The price chart also showed several sharp corrections and high-volatility periods. This is important because it indicates that Bitcoin price behavior is highly dynamic and non-stationary.
+
+### Trading Volume
+
+Trading volume changed significantly over time and contained visible spikes. These spikes may represent periods of increased market participation, speculation, or reaction to major events.
+
+Volume is important because it reflects market activity and liquidity. However, volume alone did not fully explain price direction.
+
+### Price Distribution
+
+The distribution of Bitcoin closing prices was heavily right-skewed. This is expected because early Bitcoin prices were very low, while later prices reached much higher levels.
+
+A log transformation of price values was also explored. The log-transformed distribution appeared more balanced and helped reduce the effect of extreme price values.
+
+### Return Distribution
+
+The return distribution was concentrated around zero. This means that most 1-minute price movements were small. However, the distribution also contained extreme values, which is typical in financial markets.
+
+This shows that Bitcoin returns are not normally distributed and may contain sudden large movements.
+
+### Volatility Analysis
+
+Volatility was calculated using the price range within each interval:
+
+```text
+Volatility = High - Low
+```
+
+Rolling volatility was also calculated to observe market instability over time. The analysis showed that Bitcoin volatility changes significantly across different periods. High-volatility periods tend to cluster, which is a common behavior in financial time series.
+
+### Moving Averages
+
+Moving averages were used to smooth short-term price fluctuations and observe trend behavior.
+
+Created moving averages:
+
+| Feature   | Meaning               |
+| --------- | --------------------- |
+| `MA_60`   | 1-hour moving average |
+| `MA_240`  | 4-hour moving average |
+| `MA_1440` | 1-day moving average  |
+
+The moving average plots showed that short-term averages reacted faster to market changes, while longer-term averages provided a smoother view of the overall trend.
+
+### Correlation Analysis
+
+The correlation heatmap showed very high positive correlations among `Open`, `High`, `Low`, and `Close`.
+
+This is expected because OHLC prices are measured within the same time interval and tend to move together. However, this also indicates possible feature redundancy, which is important to consider during modeling.
+
+### Monthly and Hourly Patterns
+
+Monthly volatility and volume analysis showed no strong seasonal pattern. This suggests that Bitcoin market behavior is driven more by market conditions, investor sentiment, and external events than by specific calendar months.
+
+Hourly volatility was also analyzed to explore potential intraday behavior. Since Bitcoin trades 24/7, time-based patterns may still reflect global market activity differences.
+
+---
+
+## 6. Feature Engineering
+
+Feature engineering was one of the most important stages of the project. The goal was to transform raw OHLCV data into model-ready variables that could better represent market behavior.
+
+### Time-Based Features
+
+The `Date` column was used to extract numerical time features:
+
+| Feature     | Description                      |
+| ----------- | -------------------------------- |
+| `Year`      | Year of the observation          |
+| `Month`     | Month as an integer              |
+| `Hour`      | Hour of the day                  |
+| `DayOfWeek` | Day of week as a numerical value |
+
+These features allow the model to capture possible time-dependent patterns in market behavior.
+
+### Price-Based Features
+
+Several price-based features were created:
+
+| Feature      | Formula                 | Meaning                         |
+| ------------ | ----------------------- | ------------------------------- |
+| `Volatility` | `High - Low`            | Price range within the interval |
+| `Return`     | `(Close - Open) / Open` | Percentage price movement       |
+| `Log_Return` | `log(Close / Open)`     | Logarithmic return              |
+
+`Price_change` was initially created but later removed from the final model-ready feature set because it carried similar information to `Return`.
+
+### Moving Average Features
+
+Moving averages were created to capture smoothed price trends:
+
+| Feature   | Description       |
+| --------- | ----------------- |
+| `MA_60`   | Short-term trend  |
+| `MA_240`  | Medium-term trend |
+| `MA_1440` | Daily trend       |
+
+### Rolling Volatility
+
+`Rolling_Volatility` was created using the rolling standard deviation of returns. This feature captures recent market instability.
+
+### Lag Features
+
+Lag features were added to allow the model to use previous market values:
+
+| Feature        | Description                |
+| -------------- | -------------------------- |
+| `Close_Lag_1`  | Previous close price       |
+| `Close_Lag_5`  | Close price 5 minutes ago  |
+| `Close_Lag_15` | Close price 15 minutes ago |
+| `Return_Lag_1` | Previous return            |
+| `Volume_Lag_1` | Previous volume            |
+
+Lag features are especially important in time-series modeling because they provide historical context.
+
+### Target Variable
+
+The target variable was created as:
+
+```text
+Next_Close = next interval's Close price
+```
+
+This allows the model to predict the next 1-minute Bitcoin closing price.
+
+---
+
+## 7. Machine Learning Methodology
+
+The project used a regression-based machine learning approach. The final model-ready dataset was split using a time-based train-test split.
+
+### Train-Test Split
+
+The dataset was split chronologically:
+
+| Split        |   Portion |
+| ------------ | --------: |
+| Training set | First 80% |
+| Test set     | Final 20% |
+
+This was important because the data is time-series data. A random split could introduce data leakage by allowing future observations to appear in the training set.
+
+### Scaling and Pipeline
+
+The models were built using scikit-learn pipelines. Linear models are sensitive to feature scales, so `StandardScaler` was used before model training.
+
+The pipeline structure was:
+
+```text
+StandardScaler → Regression Model
+```
+
+This ensures that scaling is fit only on the training data and then applied consistently to the test data.
+
+### Models Used
+
+Four regression models were trained and compared:
+
+| Model                 | Reason for Use                           |
+| --------------------- | ---------------------------------------- |
+| Linear Regression     | Baseline interpretable regression model  |
+| Ridge Regression      | Regularized linear model with L2 penalty |
+| Lasso Regression      | Regularized linear model with L1 penalty |
+| ElasticNet Regression | Combination of L1 and L2 regularization  |
+
+Tree-based models such as Random Forest and Gradient Boosting were initially considered but excluded from the final comparison because the full high-frequency dataset was computationally expensive to train on.
+
+### Model Descriptions
+
+#### Linear Regression
+
+Linear Regression estimates a linear relationship between input features and the target variable. It was used as the baseline model. In this project, it performed best overall.
+
+Advantages:
+
+* Fast to train.
+* Easy to interpret.
+* Strong baseline for regression.
+
+Limitations:
+
+* Assumes mostly linear relationships.
+* May struggle with highly non-linear market behavior.
+
+#### Ridge Regression
+
+Ridge Regression adds L2 regularization to reduce overfitting and control large coefficients.
+
+Advantages:
+
+* Useful when features are highly correlated.
+* More stable than ordinary linear regression in some cases.
+
+Limitations:
+
+* Does not eliminate features.
+* Still assumes a mostly linear relationship.
+
+#### Lasso Regression
+
+Lasso Regression uses L1 regularization and can shrink some coefficients to zero.
+
+Advantages:
+
+* Can perform implicit feature selection.
+* Useful when some features may be less important.
+
+Limitations:
+
+* Can be sensitive to the regularization strength.
+* May underperform if many features are useful.
+
+#### ElasticNet Regression
+
+ElasticNet combines L1 and L2 regularization.
+
+Advantages:
+
+* Balances Ridge and Lasso behavior.
+* Useful when there are many correlated features.
+
+Limitations:
+
+* Requires tuning `alpha` and `l1_ratio`.
+* In this project, it produced the highest error among the tested models.
+
+---
+
+## 8. Model Evaluation and Results
+
+The models were evaluated using:
+
+| Metric   | Meaning                                                  |
+| -------- | -------------------------------------------------------- |
+| MAE      | Mean absolute prediction error in price units            |
+| MSE      | Mean squared prediction error                            |
+| RMSE     | Square root of MSE; penalizes large errors more strongly |
+| R² Score | Proportion of target variance explained by the model     |
+
+The model comparison results were:
+
+| Model                 |     R² Score |     MAE |     RMSE |
+| --------------------- | -----------: | ------: | -------: |
+| Linear Regression     | 0.9999966771 | 29.3988 |  50.1903 |
+| Ridge Regression      | 0.9999966294 | 29.6299 |  50.5493 |
+| Lasso Regression      | 0.9999941272 | 39.2567 |  66.7243 |
+| ElasticNet Regression | 0.9999731925 | 89.1215 | 142.5571 |
+
+Linear Regression achieved the best performance with the highest R² score and the lowest MAE and RMSE.
+
+However, the very high R² values should be interpreted carefully. Since the model predicts the next 1-minute closing price, consecutive prices are usually very close to each other. Therefore, the task is easier than long-term forecasting.
+
+The high scores do not mean the model can predict long-term Bitcoin prices or future market crashes.
+
+---
+
+## 9. Final Model Selection
+
+Linear Regression was selected as the final model because it achieved:
+
+* Highest R² Score.
+* Lowest MAE.
+* Lowest RMSE.
+* Fast training time.
+* Simple and interpretable structure.
+
+Although regularized models such as Ridge and Lasso are useful for controlling overfitting, Linear Regression performed slightly better on the test set in this project.
+
+The final selected model was saved and later loaded using `joblib`, allowing prediction without retraining.
+
+---
+
+## 10. Prediction Analysis
+
+The final notebook loaded the saved Linear Regression model and generated predictions on the test dataset.
+
+The actual vs predicted plot showed that predicted values closely followed actual Bitcoin next closing prices. This indicates that the model captured short-term price continuity effectively.
+
+Residual analysis was also performed. Residuals were calculated as:
+
+```text
+Residual = Actual - Predicted
+```
+
+Most residuals were relatively small, but larger residual spikes appeared during periods of sharper market movement. This is expected because sudden volatility is harder to predict using only historical OHLCV data.
+
+A sample prediction table showed actual prices, predicted prices, prediction error, absolute error, and percentage error.
+
+A small percentage error analysis on the first 200 test predictions showed:
+
+| Metric       |    Value |
+| ------------ | -------: |
+| Mean % Error | 0.025974 |
+| Max % Error  | 0.149678 |
+| Min % Error  | 0.000106 |
+
+This indicates that the model’s short-term predictions were very close to actual values in the sampled predictions.
+
+However, this percentage error summary was calculated on a limited sample, so it should not be interpreted as a full-test-set percentage error unless recalculated on the entire test set.
+
+---
+
+## 11. Limitations
+
+This project has several important limitations:
+
+1. **Short prediction horizon**
+   The model predicts the next 1-minute closing price. This is not the same as predicting long-term Bitcoin trends.
+
+2. **Historical price data only**
+   The model uses OHLCV data and engineered features derived from historical prices. It does not include news, social media sentiment, macroeconomic indicators, regulations, or market psychology.
+
+3. **High market volatility**
+   Bitcoin is highly volatile. Sudden price movements, crashes, or pumps may not be predicted accurately by a model trained only on historical price data.
+
+4. **Potential overfitting risk**
+   Very high R² values in financial time-series data should be interpreted carefully. The high score is partly due to the short time horizon and strong similarity between consecutive price values.
+
+5. **Limited validation strategy**
+   The project used a time-based train-test split, which is appropriate. However, walk-forward validation or time-series cross-validation could provide a more robust evaluation.
+
+6. **No external market context**
+   The model does not understand real-world events, exchange-specific liquidity, investor sentiment, or macroeconomic shocks.
+
+---
+
+## 12. Future Work
+
+Future versions of this project could be improved in several ways:
+
+1. **Longer prediction horizons**
+   Instead of predicting the next 1-minute close, future models could predict 5-minute, 1-hour, or 1-day ahead prices.
+
+2. **Return or direction prediction**
+   Predicting `Next_Return` or price direction could be more useful than predicting the next price level directly.
+
+3. **Advanced machine learning models**
+   Models such as XGBoost, LightGBM, Random Forest, or Gradient Boosting could be tested on optimized samples or more powerful hardware.
+
+4. **Deep learning time-series models**
+   LSTM, GRU, or Transformer-based models could be used to capture sequential patterns.
+
+5. **Classical time-series models**
+   ARIMA, Prophet, or other time-series forecasting methods could be compared with machine learning models.
+
+6. **External data sources**
+   News sentiment, social media sentiment, macroeconomic indicators, crypto market indexes, and funding rates could be added.
+
+7. **Walk-forward validation**
+   Time-series cross-validation would provide a more realistic evaluation of model robustness over time.
+
+8. **Dashboard or deployment**
+   A simple dashboard could be built to visualize predictions, errors, and model performance.
+
+---
+
+## 13. Conclusion
+
+This project demonstrates a complete machine learning workflow for short-term Bitcoin price prediction.
+
+The raw Bitcoin market dataset was loaded, inspected, cleaned, and transformed into a model-ready format. Exploratory data analysis revealed strong long-term growth, high volatility, skewed price distributions, and highly correlated OHLC features.
+
+Feature engineering played an important role in improving the dataset. Time-based features, returns, log returns, moving averages, rolling volatility, and lag features were created to provide the model with market context.
+
+Four regression models were trained and compared. Linear Regression achieved the best performance, with the highest R² score and the lowest MAE and RMSE values.
+
+The final model was saved and reused for prediction without retraining. Final prediction analysis showed that the model closely followed actual next-minute closing prices.
+
+However, the results should be interpreted carefully. The model is effective for short-horizon prediction, but it should not be considered a long-term Bitcoin forecasting or investment decision system.
+
+Overall, this project successfully applies exploratory data analysis, feature engineering, regression modeling, model evaluation, and final prediction interpretation in a structured machine learning pipeline.
+
+---
+
+## Key Takeaways
+
+* The project predicts the next 1-minute Bitcoin closing price using historical OHLCV data.
+* The raw dataset contains over 7.5 million 1-minute market records.
+* Bitcoin prices show strong long-term growth but also high volatility.
+* OHLC features are highly correlated.
+* Moving averages, lag features, returns, and rolling volatility provide useful predictive signals.
+* Linear Regression performed best among the tested models.
+* Very high R² scores should be interpreted carefully because the prediction horizon is very short.
+* The model is useful for short-term forecasting analysis, not long-term investment prediction.
+* Future improvements should include longer horizons, advanced models, external data, and time-series validation.
