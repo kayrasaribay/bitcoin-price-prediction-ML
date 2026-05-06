@@ -2,10 +2,16 @@
 __pycache__/
 .ipynb_checkpoints/
 .env
-*.pkl
+
 data/raw/
+data/processed/
+
 Sandbox/
+
+*.pkl
 *.csv
+
+!outputs/reports/*.csv
 
 
 
